@@ -38,5 +38,6 @@
             <item value="315" />
             <item value="316" />
         </string-array>
+        <boolean name="carrier_disable_etws_cmas_dup_detection" value="true" />
     </carrier_config>
 </carrier_config_list>
