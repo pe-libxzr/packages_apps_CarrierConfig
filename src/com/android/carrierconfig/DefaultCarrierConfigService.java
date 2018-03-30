@@ -6,6 +6,8 @@ import android.os.PersistableBundle;
 import android.service.carrier.CarrierIdentifier;
 import android.service.carrier.CarrierService;
 import android.telephony.CarrierConfigManager;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -18,6 +20,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,6 +40,7 @@ import com.android.internal.util.FastXmlSerializer;
 public class DefaultCarrierConfigService extends CarrierService {
 
     private static final String SPN_EMPTY_MATCH = "null";
+    private static final String ICCID_EMPTY_MATCH = "null";
 
     private static final String TAG = "DefaultCarrierConfigService";
 
@@ -63,7 +67,8 @@ public class DefaultCarrierConfigService extends CarrierService {
             return null;
         }
 
-
+        final String iccid = getIccidFromCarrierIdentifier(id);
+        Log.d(TAG, "onLoadConfig with iccid: " + iccid);
         PersistableBundle config = null;
         try {
             synchronized (this) {
@@ -75,7 +80,7 @@ public class DefaultCarrierConfigService extends CarrierService {
             XmlPullParser parser = mFactory.newPullParser();
             String fileName = "carrier_config_" + id.getMcc() + id.getMnc() + ".xml";
             parser.setInput(getApplicationContext().getAssets().open(fileName), "utf-8");
-            config = readConfigFromXml(parser, id);
+            config = readConfigFromXml(parser, id, iccid);
         }
         catch (IOException | XmlPullParserException e) {
             Log.d(TAG, e.toString());
@@ -86,7 +91,7 @@ public class DefaultCarrierConfigService extends CarrierService {
         // Treat vendor.xml as if it were appended to the carrier config file we read.
         XmlPullParser vendorInput = getApplicationContext().getResources().getXml(R.xml.vendor);
         try {
-            PersistableBundle vendorConfig = readConfigFromXml(vendorInput, id);
+            PersistableBundle vendorConfig = readConfigFromXml(vendorInput, id, iccid);
             config.putAll(vendorConfig);
         }
         catch (IOException | XmlPullParserException e) {
@@ -121,8 +126,8 @@ public class DefaultCarrierConfigService extends CarrierService {
      * @param id the details of the SIM operator used to filter parts of the document
      * @return a possibly empty PersistableBundle containing the config values.
      */
-    static PersistableBundle readConfigFromXml(XmlPullParser parser, CarrierIdentifier id)
-            throws IOException, XmlPullParserException {
+    static PersistableBundle readConfigFromXml(XmlPullParser parser, CarrierIdentifier id,
+            String iccid) throws IOException, XmlPullParserException {
         PersistableBundle config = new PersistableBundle();
 
         if (parser == null) {
@@ -135,7 +140,7 @@ public class DefaultCarrierConfigService extends CarrierService {
         while (((event = parser.next()) != XmlPullParser.END_DOCUMENT)) {
             if (event == XmlPullParser.START_TAG && "carrier_config".equals(parser.getName())) {
                 // Skip this fragment if it has filters that don't match.
-                if (!checkFilters(parser, id)) {
+                if (!checkFilters(parser, id, iccid)) {
                     continue;
                 }
                 PersistableBundle configFragment = PersistableBundle.restoreFromXml(parser);
@@ -174,7 +179,7 @@ public class DefaultCarrierConfigService extends CarrierService {
      * @param id the carrier details to check against.
      * @return false if any XML attribute does not match the corresponding value.
      */
-    static boolean checkFilters(XmlPullParser parser, CarrierIdentifier id) {
+    static boolean checkFilters(XmlPullParser parser, CarrierIdentifier id, String iccid) {
         boolean result = true;
         for (int i = 0; i < parser.getAttributeCount(); ++i) {
             String attribute = parser.getAttributeName(i);
@@ -200,6 +205,9 @@ public class DefaultCarrierConfigService extends CarrierService {
                     break;
                 case "device":
                     result = result && value.equalsIgnoreCase(Build.DEVICE);
+                    break;
+                case "iccid":
+                    result = result && matchOnIccid(value, iccid);
                     break;
                 default:
                     Log.e(TAG, "Unknown attribute " + attribute + "=" + value);
@@ -252,6 +260,41 @@ public class DefaultCarrierConfigService extends CarrierService {
             Pattern spPattern = Pattern.compile(xmlSP, Pattern.CASE_INSENSITIVE);
             Matcher matcher = spPattern.matcher(currentSP);
             matchFound = matcher.matches();
+        }
+        return matchFound;
+    }
+
+    private String getIccidFromCarrierIdentifier(CarrierIdentifier id) {
+        final String imsi = id.getImsi();
+        TelephonyManager tm = TelephonyManager.from(this);
+        SubscriptionManager sb = SubscriptionManager.from(this);
+        List<SubscriptionInfo> subInfos = sb.getActiveSubscriptionInfoList();
+        if (subInfos != null && imsi != null) {
+            for (SubscriptionInfo subInfo : subInfos) {
+                String imsiFromSub = tm.getSubscriberId(subInfo.getSubscriptionId());
+                if (imsi.equals(imsiFromSub)) {
+                    return subInfo.getIccId();
+                }
+            }
+        }
+        return null;
+    }
+
+    static boolean matchOnIccid(String xmlIccid, String iccid) {
+        boolean matchFound = false;
+
+        if (ICCID_EMPTY_MATCH.equalsIgnoreCase(xmlIccid)) {
+            if (TextUtils.isEmpty(iccid)) {
+                matchFound = true;
+            }
+        } else if (iccid != null) {
+            String[] iccidList = xmlIccid.split(",");
+            for (String iccidPrefix : iccidList) {
+                if (iccid.startsWith(iccidPrefix)) {
+                    matchFound = true;
+                    break;
+                }
+            }
         }
         return matchFound;
     }

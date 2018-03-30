@@ -31,7 +31,7 @@ public class CarrierConfigTest extends InstrumentationTestCase {
         forEachConfigXml(new ParserChecker() {
             public void check(XmlPullParser parser) throws XmlPullParserException, IOException {
                 PersistableBundle b = DefaultCarrierConfigService.readConfigFromXml(parser,
-                        new CarrierIdentifier("001", "001", "Test", "001001123456789", "", ""));
+                        new CarrierIdentifier("001", "001", "Test", "001001123456789", "", ""), "");
                 assertNotNull("got null bundle", b);
             }
         });
@@ -58,6 +58,7 @@ public class CarrierConfigTest extends InstrumentationTestCase {
                                 case "spn":
                                 case "imsi":
                                 case "device":
+                                case "iccid":
                                     break;
                                 default:
                                     fail("Unknown attribute '" + attribute
