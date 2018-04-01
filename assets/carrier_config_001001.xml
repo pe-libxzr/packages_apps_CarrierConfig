@@ -12,4 +12,7 @@
     <carrier_config imsi="^001001.*">
         <boolean name="carrier_volte_available_bool" value="true" />
     </carrier_config>
+    <carrier_config iccid="null">
+        <boolean name="carrier_volte_available_bool" value="true" />
+    </carrier_config>
 </carrier_config_list>
