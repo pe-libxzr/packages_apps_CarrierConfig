@@ -92,5 +92,6 @@
         <boolean name="carrier_name_override_bool" value="true" />
         <string name="carrier_name_string">Verizon</string>
         <boolean name="carrier_volte_tty_supported_bool" value="true" />
+        <boolean name="show_apn_setting_cdma_bool" value="true" />
     </carrier_config>
 </carrier_config_list>
